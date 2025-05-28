@@ -4,11 +4,35 @@ import java.util.*;
 import java.util.concurrent.*;
 public class Main {
     public static final Map<Integer, Integer> sizeToFreq = new HashMap<>();
+    private static final Object monitor = new Object();
+    private static volatile boolean updateNeeded = false;
 
     public static final int THREADS_COUNT = 1000;
     public static void main(String[] args) throws InterruptedException {
         int threadsCount = THREADS_COUNT;
         Thread[] threads = new Thread[threadsCount];
+
+        // Создаем и запускаем поток для вывода лидера
+        Thread leaderThread = new Thread(() -> {
+            while (!Thread.interrupted()) {
+                synchronized (monitor) {
+                    try {
+                        while (!updateNeeded && !Thread.interrupted()) {
+                            monitor.wait();
+                        }
+                        if (Thread.interrupted()) break;
+
+                        printCurrentLeader();
+                        updateNeeded = false;
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
+            System.out.println("Поток вывода лидера завершен");
+        });
+        leaderThread.start();
 
         // Создаем и запускаем потоки
         for (int i = 0; i < threadsCount; i++) {
@@ -21,6 +45,13 @@ public class Main {
                     sizeToFreq.put(rCount, sizeToFreq.getOrDefault(rCount, 0) + 1);
                 }
 
+                System.out.println("Количество 'R': " + rCount);
+
+                // Уведомляем поток вывода о новом обновлении
+                synchronized (monitor) {
+                    updateNeeded = true;
+                    monitor.notify();
+                }
             });
             threads[i].start();
         }
@@ -29,6 +60,10 @@ public class Main {
         for (Thread thread : threads) {
             thread.join();
         }
+
+        // Прерываем поток вывода лидера
+        leaderThread.interrupt();
+        leaderThread.join();
 
         // Выводим статистику
         printStatistics();
@@ -47,6 +82,24 @@ public class Main {
     // Подсчет символов в строке
     private static int countChar(String str, char ch) {
         return (int) str.chars().filter(c -> c == ch).count();
+    }
+
+    // Вывод текущего лидера
+    private static void printCurrentLeader() {
+        synchronized (sizeToFreq) {
+            if (sizeToFreq.isEmpty()) {
+                System.out.println("Лидер: данных еще нет");
+                return;
+            }
+
+            Map.Entry<Integer, Integer> maxEntry = Collections.max(
+                    sizeToFreq.entrySet(),
+                    Map.Entry.comparingByValue()
+            );
+
+            System.out.println("Текущий лидер: " + maxEntry.getKey() +
+                    " (встретилось " + maxEntry.getValue() + " раз)");
+        }
     }
 
     // Вывод статистики
