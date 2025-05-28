@@ -21,6 +21,8 @@ public class Main {
                     sizeToFreq.put(rCount, sizeToFreq.getOrDefault(rCount, 0) + 1);
                 }
 
+                System.out.println("Количество 'R': " + rCount);
+
             });
             threads[i].start();
         }
